@@ -1,4 +1,3 @@
-var https = require('https');
 var request = require('request');
 var alexa = require('alexa-app');
 var AWS = require('aws-sdk');
@@ -36,11 +35,11 @@ app.intent('Current',
     function(request, response) {
         console.log('current temperature requested.');
 
-        currentStatus(
-            'https://developer-api.nest.com',
-            '/devices?auth=c.dIcXQLCJsrZcXKBdYpvWvHsutiX0FADKw7YLGrZNGrwln0ezizQLxdvx3HoG0zpGiysKb614YCjqBWKCeCc4QvS2tKZwAKZhSd5IxfcAd0Oe8ZUvtcgbF5UjZmauiZwe95U1gE7Gp6iRY9LB',
-            function(environment) {
+        AWS.config.loadFromPath('./apps/nest/credentials.json');
+        var documentClient = new AWS.DynamoDB.DocumentClient();
 
+        currentStatus(documentClient, request.userId,
+            function(environment) {
                 var responseText = "It is currently ";
                 switch (environment.thermostats.kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7.temperature_scale)
                 {
@@ -199,10 +198,11 @@ app.intent('TurnUpHeat',
     }
 );
 
-function getNestInfo(documentClient, callback)
+
+function currentStatus(documentClient, userId, callback)
 {
-    //AWS.config.loadFromPath('./apps/nest/credentials.json');
-    //var docClient = new AWS.DynamoDB.DocumentClient();
+    var nestApiDeviceUrl = 'https://developer-api.nest.com/devices?auth=';
+
     var params = {
         TableName : "AlexaNestUser",
         KeyConditionExpression: "#id = :user",
@@ -210,7 +210,7 @@ function getNestInfo(documentClient, callback)
             "#id": "AmazonUserId"
         },
         ExpressionAttributeValues: {
-            ":user":request.userId
+            ":user": userId
         }
     };
 
@@ -218,21 +218,19 @@ function getNestInfo(documentClient, callback)
         if (error) {
             console.log("error querying document: " + error);
         } else {
-            return data;
+
+            var path = nestApiDeviceUrl + data.Items[0].NestAuthorizationCode;
+
+            // Perform HTTP request
+            request(
+                path,
+                function (error, response, body) {
+                    console.log("Nest response status: " + response.statusCode);
+                    var environment = JSON.parse(body);
+                    callback(environment);
+                });
         }
     });
-}
-
-function currentStatus(host, path, callback)
-{
-    // Perform HTTP request
-    request(
-        host + path,
-        function (error, response, body) {
-            console.log("Nest response status: " + response.statusCode);
-            var environment = JSON.parse(body);
-            callback(environment);
-        });
 }
 
 function setTemperature(host, path, requestedTemperature, callback)
