@@ -1,0 +1,15 @@
+{
+  "name":         "alexa-nest-integration",
+  "version":      "0.0.1",
+  "description":  "Alexa-Nest Thermostat integration",
+  "main":         "index.js",
+  "author":       "David Laughlin <davidlaughlin@gmail.com>",
+  "alexa": {
+    "applicationId": "amzn1.echo-sdk-ams.app.d0693f11-d9dc-4666-8b53-233c3d3a47a9"
+  },
+  "dependencies":{
+    "request":    "2.67.0",
+    "alexa-app":  "2.1.0",
+    "aws-sdk":    "2.2.31"
+  }
+}
