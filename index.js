@@ -20,8 +20,7 @@ app.sessionEnded(function(request, response) {
    // cleanup if necessary
 });
 
-app.error = function(error)
-{
+app.error = function(error) {
     console.log(error);
 };
 
@@ -31,13 +30,16 @@ app.intent('Current',
         "utterances":
             [
                 "current",
-                "for the current temperature"
+                "for the current temperature",
+                "what is the current temperature",
+                "how hot",
+                "how cold"
             ]
     },
     function(request, response) {
         console.log('current temperature requested.');
         async.waterfall([
-            async.apply(getNestInfo, request),
+            async.apply(getNestInfo, request.userId),
             getThermostatsInfo,
             buildResult
         ], function (error, responseText) {
@@ -68,35 +70,18 @@ app.intent('SetThermostat',
     },
     function (request, response) {
         console.log('set temperatore requested.');
+        var requestedTemperature = parseInt(request.data.request.intent.slots.number.value);
         async.waterfall([
-            async.apply(getNestInfo, request),
-            async.apply(setThermostatTemperature),
-            buildResult
-        ], function (error, responseText) {
+            async.apply(getNestInfo, request.userId),
+            async.apply(setThermostatTemperature, requestedTemperature)
+        ], function (error, statusCode) {
             if (error) {
                 console.log(error);
             } else {
-                response
-                    .say(responseText)
-                    .card("Temperature Changed", responseText)
-                    .shouldEndSession(true)
-                    .send();
-            }
-        });
-
-/*
-        setTemperature(
-            'https://developer-api.nest.com',
-            '/devices/thermostats/kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7?auth=c.dIcXQLCJsrZcXKBdYpvWvHsutiX0FADKw7YLGrZNGrwln0ezizQLxdvx3HoG0zpGiysKb614YCjqBWKCeCc4QvS2tKZwAKZhSd5IxfcAd0Oe8ZUvtcgbF5UjZmauiZwe95U1gE7Gp6iRY9LB',
-            requestedTemperature,
-            function(statusCode) {
                 var responseText = "";
                 if (statusCode === 200) {
-                    responseText = "Temperature has been set to ";
-                    responseText = responseText + request.data.request.intent.slots.number.value + " degrees.";
-                }
-                else
-                {
+                    responseText = "Temperature has been set to " + requestedTemperature + " degrees.";
+                } else {
                     responseText = "I couldn't ask Nest to change the temperature. Try again later.";
                 }
 
@@ -105,12 +90,8 @@ app.intent('SetThermostat',
                     .card("Temperature Changed", responseText)
                     .shouldEndSession(true)
                     .send();
-
-                response.send();
             }
-        );
-
-*/
+        });
 
         // Asynchronous must return false.
         return false;
@@ -123,42 +104,13 @@ app.intent('TurnDownHeat',
             [
                 "down",
                 "temperature down",
-                "to turn the temperature down"
+                "to turn the temperature down",
+                "to turn it down"
             ]
     },
     function (request, response)
     {
-        currentStatus(
-            'https://developer-api.nest.com',
-            '/devices?auth=c.dIcXQLCJsrZcXKBdYpvWvHsutiX0FADKw7YLGrZNGrwln0ezizQLxdvx3HoG0zpGiysKb614YCjqBWKCeCc4QvS2tKZwAKZhSd5IxfcAd0Oe8ZUvtcgbF5UjZmauiZwe95U1gE7Gp6iRY9LB',
-            function(environment) {
-                var currentTemperature = environment.thermostats.kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7.target_temperature_f;
-                var targetTemperature = currentTemperature - 2;
-
-                setTemperature(
-                    'https://developer-api.nest.com',
-                    '/devices/thermostats/kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7?auth=c.dIcXQLCJsrZcXKBdYpvWvHsutiX0FADKw7YLGrZNGrwln0ezizQLxdvx3HoG0zpGiysKb614YCjqBWKCeCc4QvS2tKZwAKZhSd5IxfcAd0Oe8ZUvtcgbF5UjZmauiZwe95U1gE7Gp6iRY9LB',
-                    targetTemperature,
-                    function(statusCode) {
-                        var responseText = "";
-                        if (statusCode === 200) {
-                            responseText = "I've asked Nest to turn the temperature up a couple of degrees to " + targetTemperature + ".";
-                        }
-                        else
-                        {
-                            responseText = "I couldn't ask Nest to change the temperature. Try again later.";
-                        }
-
-                        response
-                            .say(responseText)
-                            .card("Turning Down", responseText)
-                            .shouldEndSession(true)
-                            .send();
-                    }
-                )
-            }
-        );
-
+        // TODO
         return false;
     }
 );
@@ -173,42 +125,12 @@ app.intent('TurnUpHeat',
             ]
     },
     function (request, response) {
-        currentStatus(
-            'https://developer-api.nest.com',
-            '/devices?auth=c.dIcXQLCJsrZcXKBdYpvWvHsutiX0FADKw7YLGrZNGrwln0ezizQLxdvx3HoG0zpGiysKb614YCjqBWKCeCc4QvS2tKZwAKZhSd5IxfcAd0Oe8ZUvtcgbF5UjZmauiZwe95U1gE7Gp6iRY9LB',
-            function (environment) {
-                var currentTemperature = environment.thermostats.kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7.target_temperature_f;
-                var targetTemperature = currentTemperature + 2;
-
-                setTemperature(
-                    'https://developer-api.nest.com',
-                    '/devices/thermostats/kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7?auth=c.dIcXQLCJsrZcXKBdYpvWvHsutiX0FADKw7YLGrZNGrwln0ezizQLxdvx3HoG0zpGiysKb614YCjqBWKCeCc4QvS2tKZwAKZhSd5IxfcAd0Oe8ZUvtcgbF5UjZmauiZwe95U1gE7Gp6iRY9LB',
-                    targetTemperature,
-                    function (statusCode) {
-                        var responseText = "";
-                        if (statusCode === 200) {
-                            responseText = "I've asked Nest to turn the temperature up a couple of degrees to " + targetTemperature + ".";
-                        }
-                        else
-                        {
-                            responseText = "I couldn't ask Nest to change the temperature. Try again later.";
-                        }
-
-                        response
-                            .say(responseText)
-                            .card("Turning Down", responseText)
-                            .shouldEndSession(true)
-                            .send();
-                    }
-                )
-            }
-        );
-
+        // TODO
         return false;
     }
 );
 
-function getNestInfo(request, callback) {
+function getNestInfo(userId, callback) {
     AWS.config.loadFromPath('./apps/nest/credentials.json');
     var documentClient = new AWS.DynamoDB.DocumentClient();
 
@@ -219,13 +141,14 @@ function getNestInfo(request, callback) {
             "#id": "AmazonUserId"
         },
         ExpressionAttributeValues: {
-            ":user": request.userId
+            ":user": userId
         }
     };
 
     documentClient.query(params, function(error, data) {
         if (error) {
-            callback(error, null);
+            callback(error);
+            return;
         }
         else {
             callback(null, data.Items[0]);    // only expecting one record in db since querying by key
@@ -253,52 +176,28 @@ function getThermostatsInfo(nestInfo, callback) {
 
 function buildResult(environment, callback) {
     var responseText = "";
-    for (thermostat in environment.thermostats)
+    for (var key in environment.thermostats)
     {
-        responseText = responseText + "In the hallway it is currently  ";
-        switch (environment.thermostats[thermostat].temperature_scale)
+        var thermostat = environment.thermostats[key];
+        responseText = responseText + "In the " + thermostat.name + " it is currently ";
+        switch (thermostat.temperature_scale)
         {
             case "F":
-                responseText = responseText + environment.thermostats[thermostat].ambient_temperature_f + " degrees fahrenheit, and ";
+                responseText = responseText + thermostat.ambient_temperature_f + " degrees fahrenheit, and ";
                 break;
             case "C":
-                responseText = responseText + environment.thermostats[thermostat].ambient_temperature_c + " degrees celsius, and ";
+                responseText = responseText + thermostat.ambient_temperature_c + " degrees celsius, and ";
         }
 
-        responseText = responseText + environment.thermostats[thermostat].humidity + " percent humidity.";
+        responseText = responseText + thermostat.humidity + " percent humidity.";
     }
 
     callback(null, responseText);
 }
 
-function setTemperature(host, path, requestedTemperature, callback)
-{
-
-    var postData =
-    {
-        "target_temperature_f": requestedTemperature
-    };
-
-    var url = host + path;
-    var options = {
-        method: 'put',
-        body: postData,
-        json: true,
-        url: url
-    };
-
-    request(
-        options,
-        function (error, response, body) {
-            console.log("Nest Response Status: " + response.statusCode);
-            callback(response.statusCode);
-        });
-}
-
-function setThermostatTemperature(nestInfo, request, callback) {
-    var requestedTemperature = parseInt(request.data.request.intent.slots.number.value);
-    var nestApiDeviceUrl = 'https://developer-api.nest.com/devices?auth=';
-    var url = nestApiDeviceUrl + nestInfo.NestAuthorizationCode;
+function setThermostatTemperature(requestedTemperature, nestInfo, callback) {
+    var nestApiThermostatUrl = 'https://developer-api.nest.com/devices/thermostats/kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7?auth=';
+    var url = nestApiThermostatUrl + nestInfo.NestAuthorizationCode;
 
     var postData =
     {
@@ -313,12 +212,15 @@ function setThermostatTemperature(nestInfo, request, callback) {
     };
 
     // Perform HTTPS request
-
     request(
         options,
         function (error, response, body) {
-            console.log("Nest response status: " + response.statusCode);
-            callback(response.statusCode);
+            if (error) {
+                callback(error);
+                return;
+            } else {
+                callback(null, response.statusCode);
+            }
         });
 }
 
