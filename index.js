@@ -1,11 +1,13 @@
 var request = require('request');
 var alexa = require('alexa-app');
 var AWS = require('aws-sdk');
+var async = require('async');
 var app = new alexa.app('nest');
 
 app.launch(function(request, response) {
     console.log('launch requested.');
-    var responseText = "What would you like me to ask Nest? I can ask it the current status or to change the temperature.";
+
+    var responseText = "Ask for current status.";
 
     response
         .say(responseText)
@@ -34,31 +36,21 @@ app.intent('Current',
     },
     function(request, response) {
         console.log('current temperature requested.');
-
-        AWS.config.loadFromPath('./apps/nest/credentials.json');
-        var documentClient = new AWS.DynamoDB.DocumentClient();
-
-        currentStatus(documentClient, request.userId,
-            function(environment) {
-                var responseText = "It is currently ";
-                switch (environment.thermostats.kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7.temperature_scale)
-                {
-                    case "F":
-                        responseText = responseText + environment.thermostats.kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7.ambient_temperature_f + " degrees fahrenheit, and ";
-                        break;
-                    case "C":
-                        responseText = responseText + environment.thermostats.kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7.ambient_temperature_c + " degrees celsius, and ";
-                }
-
-                responseText = responseText + environment.thermostats.kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7.humidity + " percent humidity.";
-
+        async.waterfall([
+            async.apply(getNestInfo, request),
+            getThermostatsInfo,
+            buildResult
+        ], function (error, responseText) {
+            if (error) {
+                console.log(error);
+            } else {
                 response
                     .say(responseText)
                     .card("Current", responseText)
                     .shouldEndSession(true)
                     .send();
             }
-        );
+        });
 
         // Asynchronous must return false.
         return false;
@@ -75,8 +67,24 @@ app.intent('SetThermostat',
             ]
     },
     function (request, response) {
-        var requestedTemperature = parseInt(request.data.request.intent.slots.number.value);
-        console.log('set temperature requested: ' + requestedTemperature);
+        console.log('set temperatore requested.');
+        async.waterfall([
+            async.apply(getNestInfo, request),
+            async.apply(setThermostatTemperature),
+            buildResult
+        ], function (error, responseText) {
+            if (error) {
+                console.log(error);
+            } else {
+                response
+                    .say(responseText)
+                    .card("Temperature Changed", responseText)
+                    .shouldEndSession(true)
+                    .send();
+            }
+        });
+
+/*
         setTemperature(
             'https://developer-api.nest.com',
             '/devices/thermostats/kzruxo9mRefkIhQxiMxAvH_SGCk_1IK7?auth=c.dIcXQLCJsrZcXKBdYpvWvHsutiX0FADKw7YLGrZNGrwln0ezizQLxdvx3HoG0zpGiysKb614YCjqBWKCeCc4QvS2tKZwAKZhSd5IxfcAd0Oe8ZUvtcgbF5UjZmauiZwe95U1gE7Gp6iRY9LB',
@@ -101,6 +109,8 @@ app.intent('SetThermostat',
                 response.send();
             }
         );
+
+*/
 
         // Asynchronous must return false.
         return false;
@@ -198,10 +208,9 @@ app.intent('TurnUpHeat',
     }
 );
 
-
-function currentStatus(documentClient, userId, callback)
-{
-    var nestApiDeviceUrl = 'https://developer-api.nest.com/devices?auth=';
+function getNestInfo(request, callback) {
+    AWS.config.loadFromPath('./apps/nest/credentials.json');
+    var documentClient = new AWS.DynamoDB.DocumentClient();
 
     var params = {
         TableName : "AlexaNestUser",
@@ -210,31 +219,61 @@ function currentStatus(documentClient, userId, callback)
             "#id": "AmazonUserId"
         },
         ExpressionAttributeValues: {
-            ":user": userId
+            ":user": request.userId
         }
     };
 
     documentClient.query(params, function(error, data) {
         if (error) {
-            console.log("error querying document: " + error);
-        } else {
-
-            var path = nestApiDeviceUrl + data.Items[0].NestAuthorizationCode;
-
-            // Perform HTTP request
-            request(
-                path,
-                function (error, response, body) {
-                    console.log("Nest response status: " + response.statusCode);
-                    var environment = JSON.parse(body);
-                    callback(environment);
-                });
+            callback(error, null);
         }
-    });
+        else {
+            callback(null, data.Items[0]);    // only expecting one record in db since querying by key
+        }
+    })
+}
+
+function getThermostatsInfo(nestInfo, callback) {
+    var nestApiDeviceUrl = 'https://developer-api.nest.com/devices?auth=';
+    var path = nestApiDeviceUrl + nestInfo.NestAuthorizationCode;
+
+    // Perform HTTPS request
+    request(
+        path,
+        function (error, response, body) {
+            console.log("Nest response status: " + response.statusCode);
+            if (error) {
+                callback(error, null);
+            }
+
+            var environment = JSON.parse(body);
+            callback(null, environment);
+        });
+}
+
+function buildResult(environment, callback) {
+    var responseText = "";
+    for (thermostat in environment.thermostats)
+    {
+        responseText = responseText + "In the hallway it is currently  ";
+        switch (environment.thermostats[thermostat].temperature_scale)
+        {
+            case "F":
+                responseText = responseText + environment.thermostats[thermostat].ambient_temperature_f + " degrees fahrenheit, and ";
+                break;
+            case "C":
+                responseText = responseText + environment.thermostats[thermostat].ambient_temperature_c + " degrees celsius, and ";
+        }
+
+        responseText = responseText + environment.thermostats[thermostat].humidity + " percent humidity.";
+    }
+
+    callback(null, responseText);
 }
 
 function setTemperature(host, path, requestedTemperature, callback)
 {
+
     var postData =
     {
         "target_temperature_f": requestedTemperature
@@ -246,12 +285,39 @@ function setTemperature(host, path, requestedTemperature, callback)
         body: postData,
         json: true,
         url: url
-    }
+    };
 
     request(
         options,
         function (error, response, body) {
             console.log("Nest Response Status: " + response.statusCode);
+            callback(response.statusCode);
+        });
+}
+
+function setThermostatTemperature(nestInfo, request, callback) {
+    var requestedTemperature = parseInt(request.data.request.intent.slots.number.value);
+    var nestApiDeviceUrl = 'https://developer-api.nest.com/devices?auth=';
+    var url = nestApiDeviceUrl + nestInfo.NestAuthorizationCode;
+
+    var postData =
+    {
+        "target_temperature_f": requestedTemperature
+    };
+
+    var options = {
+        method: 'put',
+        body: postData,
+        json: true,
+        url: url
+    };
+
+    // Perform HTTPS request
+
+    request(
+        options,
+        function (error, response, body) {
+            console.log("Nest response status: " + response.statusCode);
             callback(response.statusCode);
         });
 }
